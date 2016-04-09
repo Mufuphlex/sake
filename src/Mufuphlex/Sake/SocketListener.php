@@ -158,27 +158,20 @@ class SocketListener extends SocketAbstract implements SocketListenerInterface, 
      */
     private function listen()
     {
-        $this->log(__FUNCTION__);
         $this->readArray = ($this->socketClients ?: array($this->socket));
-        $ts = -microtime(true);
 
         if (socket_select($this->readArray, $this->writeArray, $this->exceptArray, $this->tvSec) < 1) {
-            $this->log("\t\tfinish socket select: ".(microtime(true)+$ts));
             return true;
         }
 
         try {
-            $ts = -microtime(true);
             $this->putSocketMessageIfAny();
-            $this->log("\t\tfinish put: ".(microtime(true)+$ts));
         } catch (Exception $e) {
             $this->log($e->__toString());
             return false;
         }
 
-        $ts = -microtime(true);
         $this->processSocketClients();
-        $this->log("\t\tfinish clients: ".(microtime(true)+$ts));
         return true;
     }
 
