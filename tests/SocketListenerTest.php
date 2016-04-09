@@ -13,21 +13,16 @@ class SocketListenerTest extends \PHPUnit_Framework_TestCase
         $phpUnit = $this;
 
         $socketListener->setAfterListen(function(SocketListener $listener) use ($phpUnit){
-            try {
-                static $tick = -1;
-                $tick++;
+            static $tick = -1;
+            $tick++;
 
-                if (!$tick) {
-                    $phpUnit->assertTrue($listener->isListening());
-                    return true;
-                }
-
-                $listener->stop();
-                //            $this->assertFalse($listener->isListening());
+            if (!$tick) {
                 $phpUnit->assertTrue($listener->isListening());
-            } catch (\Exception $e) {
-                $phpUnit->fail('Achtung!!!');
+                return true;
             }
+
+            $listener->stop();
+            $this->assertFalse($listener->isListening());
         });
 
         $socketListener->run();
