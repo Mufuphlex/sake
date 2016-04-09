@@ -24,4 +24,16 @@ interface SocketListenerInterface
      * @return void
      */
     public function stop();
+
+    /**
+     * @param callable $callable
+     * @return $this
+     */
+    public function setAfterInit($callable);
+
+    /**
+     * @param callable $callable
+     * @return $this
+     */
+    public function setAfterListen($callable);
 }

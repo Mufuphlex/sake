@@ -105,6 +105,10 @@ class SocketListener extends SocketAbstract implements SocketListenerInterface, 
         return $this->listening;
     }
 
+    /**
+     * @param callable $callable
+     * @return $this
+     */
     public function setAfterInit($callable)
     {
         if (!is_callable($callable)) {
@@ -112,8 +116,13 @@ class SocketListener extends SocketAbstract implements SocketListenerInterface, 
         }
 
         $this->onAfterInit = $callable;
+        return $this;
     }
 
+    /**
+     * @param callable $callable
+     * @return $this
+     */
     public function setAfterListen($callable)
     {
         if (!is_callable($callable)) {
@@ -121,6 +130,7 @@ class SocketListener extends SocketAbstract implements SocketListenerInterface, 
         }
 
         $this->onAfterListen = $callable;
+        return $this;
     }
 
     /**
