@@ -6,7 +6,7 @@ namespace Mufuphlex\Sake;
  * Class SocketListener
  * @package Mufuphlex\Sake
  */
-class SocketListener
+class SocketListener implements SocketListenerInterface, InputProcessableInterface
 {
     /** @var string */
     private $address = '';
@@ -54,7 +54,6 @@ class SocketListener
     private $inputProcessor;
 
     /**
-     * Listener constructor.
      * @param string $address
      * @param int $port
      */
