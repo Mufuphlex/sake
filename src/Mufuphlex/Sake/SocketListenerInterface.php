@@ -13,4 +13,15 @@ interface SocketListenerInterface
      * @return bool
      */
     public function run();
+
+    /**
+     * @return bool
+     */
+    public function isListening();
+
+    /**
+     * @param  void
+     * @return void
+     */
+    public function stop();
 }

@@ -6,32 +6,8 @@ namespace Mufuphlex\Sake;
  * Class SocketListener
  * @package Mufuphlex\Sake
  */
-class SocketListener implements SocketListenerInterface, InputProcessableInterface
+class SocketListener extends SocketAbstract implements SocketListenerInterface, InputProcessableInterface
 {
-    /** @var string */
-    private $address = '';
-
-    /** @var string */
-    private $port;
-
-    /** @var resource */
-    private $socket;
-
-    /** @var int */
-    private $socketReadLength = 4096;
-
-    /** @var int */
-    private $socketReadType = PHP_BINARY_READ;
-
-    /** @var int */
-    private $domain = AF_INET;
-
-    /** @var int */
-    private $type = SOCK_STREAM;
-
-    /** @var int */
-    private $protocol = SOL_TCP;
-
     /** @var array */
     private $readArray = array();
 
@@ -48,31 +24,19 @@ class SocketListener implements SocketListenerInterface, InputProcessableInterfa
     private $clientCounter = 0;
 
     /** @var int */
-    private $tvSec = 5;
+    private $tvSec = 2;
 
     /** @var InputProcessorInterface */
     private $inputProcessor;
 
-    /**
-     * @param string $address
-     * @param int $port
-     */
-    public function __construct($address, $port)
-    {
-        $port = (int)$port;
+    /** @var bool */
+    private $listening = false;
 
-        if (!$port) {
-            throw new \InvalidArgumentException('$port must be a valid port number');
-        }
+    /** @var callable */
+    private $onAfterInit;
 
-        $this->port = $port;
-
-        if (!is_string($address)) {
-            throw new \InvalidArgumentException('$address must be a string: either hostname or IP');
-        }
-
-        $this->address = $address;
-    }
+    /** @var callable */
+    private $onAfterListen;
 
     /**
      * @param InputProcessorInterface $inputProcessor
@@ -95,27 +59,68 @@ class SocketListener implements SocketListenerInterface, InputProcessableInterfa
     {
         try {
             $this->init();
+            ($func = $this->onAfterInit) && $func($this);
         } catch (\Exception $e) {
             $this->log('Init error: ' . $e->__toString());
             return false;
         }
 
         $this->log('Listening..');
+        $this->listening = true;
 
         try {
             do {
                 if (!$this->listen()) {
                     $this->log('Stop listening due to error');
+                    $this->listening = false;
                     break;
                 }
-            } while (true);
+
+                ($func = $this->onAfterListen) && $func($this);
+            } while ($this->listening);
         } catch (\Exception $e) {
             $this->log($e->__toString());
+            $this->listening = false;
         }
 
-        $this->log('Close');
+        $this->log("Close\n");
         socket_close($this->socket);
         return false;
+    }
+
+    /**
+     *
+     */
+    public function stop()
+    {
+        $this->listening = false;
+        //@TODO Notify consumers
+    }
+
+    /**
+     * @return bool
+     */
+    public function isListening()
+    {
+        return $this->listening;
+    }
+
+    public function setAfterInit($callable)
+    {
+        if (!is_callable($callable)) {
+            throw new \InvalidArgumentException();
+        }
+
+        $this->onAfterInit = $callable;
+    }
+
+    public function setAfterListen($callable)
+    {
+        if (!is_callable($callable)) {
+            throw new \InvalidArgumentException();
+        }
+
+        $this->onAfterListen = $callable;
     }
 
     /**
@@ -124,17 +129,9 @@ class SocketListener implements SocketListenerInterface, InputProcessableInterfa
      */
     private function init()
     {
-        if (($this->socket = socket_create($this->domain, $this->type, $this->protocol)) === false) {
-            throw new Exception('socket_create() error: ' . socket_strerror(socket_last_error()));
-        }
-
-        if (socket_bind($this->socket, $this->address, $this->port) === false) {
-            throw new Exception('socket_bind() error: ' . socket_strerror(socket_last_error($this->socket)));
-        }
-
-        if (socket_listen($this->socket, 5) === false) {
-            throw new Exception('socket_listen() error: ' . socket_strerror(socket_last_error($this->socket)));
-        }
+        $this->socketCreate();
+        $this->socketBind();
+        $this->socketListen();
     }
 
     /**
@@ -151,20 +148,27 @@ class SocketListener implements SocketListenerInterface, InputProcessableInterfa
      */
     private function listen()
     {
+        $this->log(__FUNCTION__);
         $this->readArray = ($this->socketClients ?: array($this->socket));
+        $ts = -microtime(true);
 
         if (socket_select($this->readArray, $this->writeArray, $this->exceptArray, $this->tvSec) < 1) {
+            $this->log("\t\tfinish socket select: ".(microtime(true)+$ts));
             return true;
         }
 
         try {
+            $ts = -microtime(true);
             $this->putSocketMessageIfAny();
+            $this->log("\t\tfinish put: ".(microtime(true)+$ts));
         } catch (Exception $e) {
             $this->log($e->__toString());
             return false;
         }
 
+        $ts = -microtime(true);
         $this->processSocketClients();
+        $this->log("\t\tfinish clients: ".(microtime(true)+$ts));
         return true;
     }
 
@@ -179,7 +183,7 @@ class SocketListener implements SocketListenerInterface, InputProcessableInterfa
         }
 
         if (($socketMessage = socket_accept($this->socket)) === false) {
-            throw new Exception('socket_accept() error: ' . socket_strerror(socket_last_error($this->socket)));
+            throw new Exception('socket_accept() error: ' . $this->getSocketError());
         }
 
         $this->socketClients[++$this->clientCounter] = $socketMessage;
@@ -196,8 +200,10 @@ class SocketListener implements SocketListenerInterface, InputProcessableInterfa
                 continue;
             }
 
-            if (false === ($buffer = socket_read($client, $this->socketReadLength, $this->socketReadType))) {
-                $this->log('socket_read() error: ' . socket_strerror(socket_last_error($client)));
+            $buffer = $this->socketRead($client);
+
+            if (false === $buffer) {
+                $this->log('socket_read() error: ' . $this->getSocketError($client));
                 continue;
             }
 
